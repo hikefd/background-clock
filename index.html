@@ -1,5 +1,290 @@
 <!DOCTYPE html>
 <html>
-  <head></head>
-  <body></body>
+    <head>
+        <meta charset="utf-8">
+        <script src="https://unpkg.com/vue"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.4.2/chroma.min.js"></script>
+        <style>
+            main {
+                position: absolute;
+                margin: 0;
+                padding: 0;
+                top: 0;
+                bottom: 0;
+                left: 0;
+                right: 0;
+            }
+            svg {
+                position: absolute;
+                top: 0;
+                bottom: 0;
+                left: 0;
+                right: 0;
+            }
+            .l {
+                width: 20px;
+                height: 20px;
+                background: linear-gradient(to right, indigo, pink, orange,  blue, indigo);
+            }
+            .lane {
+                width: 20px;
+                display: inline-block;
+                position: relative;
+            }
+            .tick {
+                width: 20px;
+                height: 4px;
+            }
+            .zenith, .bottom {
+                position: absolute;
+                width: 20px;
+                font-size: 8px;
+            }
+            .zenith {
+                top: 0;
+            }
+            .bottom {
+                bottom: 0;
+            }
+            .sun {
+                position: absolute;
+            }
+        </style>
+    </head>
+    <body>
+        <main id="app">
+            <svg width="100vw" height="100vh" viewBox="0 0 900 400"  preserveAspectRatio="xMidYMid slice">
+                <linearGradient id="sky" x1="0" x2="0" y1="0" y2="1">
+                    <stop v-for="(g, idx) in skyGrad" :stop-color="g.color" :offset="g.percent + '%'"/>
+                </linearGradient>
+                <linearGradient id="fog" x1="0" x2="0" y1="0" y2="1">
+                    <stop stop-color="#ffffff00" offset="0%"/>
+                    <stop stop-color="#ffffff66" offset="100%"/>
+                </linearGradient>
+                <radialGradient id="RadialGradient1">
+                    <stop offset="0%" :stop-color="sunColor"/>
+                    <stop offset="0.4%" :stop-color="sunColor"/>
+                    <stop offset="2%" stop-color="#ffffff94"/>
+                    <stop offset="15%" stop-color="#ffffff44"/>
+                    <stop offset="27%"  stop-color="#ffffff34"/>
+                    <stop offset="60%"  stop-color="#ffffff14"/>
+                    <stop offset="100%" stop-color="#ffffff00"/>
+                  </radialGradient>
+                <!-- 太陽 -->
+
+
+                <rect fill="url(#sky)" width="900" height="400" style="mix-blend-mode: hard-light"></rect>
+                    <circle 
+                    style="mix-blend-mode: screen"
+                    :cx="(sunAzm+ Math.PI)*900/(2*Math.PI)"
+                    :cy="(Math.PI/2 - sunAlt)*800/Math.PI"
+                    r="10"
+                    :fill="sunColor"
+                ></circle>
+                  <!-- 太陽 -->
+                <circle 
+                    style="mix-blend-mode: overlay"
+                    :cx="(sunAzm+ Math.PI)*900/(2*Math.PI)"
+                    :cy="(Math.PI/2 - sunAlt)*800/Math.PI"
+                    r="800"
+                    fill="url(#RadialGradient1)"
+                ></circle>
+
+                
+                
+            </svg>
+            <svg width="100vw" height="100vh" viewBox="0 0 900 400" style="filter: blur(1px)" preserveAspectRatio="xMidYMid slice">
+                <path d="M 0 400 L 900 400 L 450 390 Z" fill="#025434"></path>
+                <rect fill="url(#fog)" width="900" height="400" style="mix-blend-mode: screen" :opacity="humid"></rect>
+            </svg>
+            <div style="position: absolute; color: white;">
+                <table>
+                    <tr><th>分割数</th><td><input type="number" v-model="div"></td></tr>
+                    <tr><th>年</th><td><input type="number" v-model="year"></td></tr>
+                    <tr><th>春分からの日数</th><td><input type="range" v-model="day" min="0" max="365">{{day}}</td></tr>
+                    <tr><th>時刻</th><td><input type="range" v-model="hour" min="0" max="24" step="0.01">{{hour}}</td></tr>
+                    <tr><th>黄道傾斜角[deg] dec0 </th><td>{{ dec0 }}</td></tr>
+                    <tr><th>平均近点離角[deg] mm </th><td>{{ mm }}</td></tr>
+                    <tr><th>冬至点と近日点がなす角度[deg] ep </th><td>{{ ep }}</td></tr>
+                    <tr><th>真近点離角[deg]  v </th><td>{{ v }}</td></tr>
+                    <tr><th>視赤緯 declination[rad] dec </th><td>{{ dec }}</td></tr>
+                    <tr><th>均時差[rad] et </th><td>{{ et }}</td></tr>
+                    <tr><th>th </th><td>{{ th }}</td></tr>
+                    <tr><th> sunAlt[rad] </th><td>{{ sunAlt }}</td></tr>
+                    <tr><th> sunAzm[rad] </th><td>{{ sunAzm }}</td></tr>
+                    <tr><th> sunColor </th><td>{{ sunColor }}</td></tr>
+                    <tr><th>thickNess</th><td>{{ thickness(sunAlt)  }}</td></tr>
+                    <tr><th>humid</th><td><input type="range" v-model="humid" min="0" max="1" step="0.1">{{ humid }}</td></tr>
+                </table>
+                
+                <hr>
+                <div class="lane" v-for="obj in gradScales">
+                    <div v-for="g in obj.scale" class="tick" :style="{backgroundColor: g}"></div>
+                    <div class="zenith">
+                        {{ hueStr(obj.color.zenith) }}<br>
+                    </div>
+                    <div class="bottom">
+                        {{ hueStr(obj.color.horizon.sun) }}<br>
+                    </div>
+                    <div class="sun" :style="{color: obj.color.sun, bottom: 0, height: (100*sunAlt/90)+ '%'}">●</div>
+                </div>
+                <canvas id="lane" height="20" width="100"></canvas>
+            </div>
+
+        </main>
+
+        <script>
+            const d2r = (deg) => ( deg * Math.PI / 180 );
+            const r2d = (rad) => ( rad * 180 / Math.PI );
+            const test1 = {
+                data() {
+                    return {
+                        colors: [
+                            { alt: -99, gamma:  1.7, zenith: '#021227', mid: '#031e57', horizon: { sun: '#1f5384', oppo: '' }, },
+                            { alt: -10, gamma:  6.2, zenith: '#031e57', mid: '#031e57', horizon: { sun: '#1f5384', oppo: '' }, },
+                            { alt:  -5, gamma: 16.2, zenith: '#131f67', mid: '#dd5824', horizon: { sun: '#f17b4e', oppo: '' }, },
+                            { alt:   0, gamma: 16.0, zenith: '#005aad', mid: '#cc8d58', horizon: { sun: '#8a414b'} },
+                            { alt:   5, gamma: 16.0, zenith: '#005aad', mid: '#d2bba3', horizon: { sun: '#f93c1e'} },
+                            { alt:  10, gamma:  8.0, zenith: '#3e6192', mid: '#d5c1a1', horizon: { sun: '#f0aa6b'} },
+                            { alt:  20, gamma:  4.3, zenith: '#0d5197', mid: '#0d5197', horizon: { sun: '#74b8e6', oppo: '' }, },
+                            { alt:  40, gamma:  2.5, zenith: '#0236a3', mid: '#0f7bc6', horizon: { sun: '#6eb3fe', oppo: '' }, },
+                            { alt:  99, gamma:  1.0, zenith: '#0040a0', mid: '#0236a3', horizon: { sun: '#1c8cc5', oppo: '' }, },
+                        ],
+                        // 水蒸気量
+                        humid: 0,
+                        // 太陽高度[deg]
+                        sunHeight: 0,
+                        // 地球半径[km]
+                        radius: 6371,
+                        // 大気厚み[km]
+                        atomos: 100,
+                        // 緯度[deg]
+                        lat: 35,
+                        // 地軸の傾き
+                        phi: 23.4,
+                        // 春分からの日数 0-365
+                        day: 0,
+                        // 年数
+                        year: 2020,
+                        // 時刻
+                        time: '00:00:00',
+                        hour: 10,
+                        // mixmode
+                        mixmode: 'lch', // lab, rgb
+                        // 分数
+                        div: 72,
+                        // 太陽色スケール
+                        sunColorScale: chroma.scale(['#ffffff', '#fe807f']).mode('lch'),
+                    };
+                },
+                computed: {
+                    gradScales() {
+                        return Object.keys(this.colors).map((t) => {
+                            const scale = chroma.scale([this.colors[t].zenith, this.colors[t].mid, this.colors[t].horizon.sun]).mode(this.mixmode).gamma(this.colors[t].gamma);
+                            const arr = [];
+                            for (let i = 0; i <= this.div; i++) {
+                                arr.push(scale(i / this.div));
+                            }
+                            return {scale: arr, color: this.colors[t]};
+                        });
+                    },
+                    // 時
+                   /* hour() {
+                        let [h, m, s = 0] = this.time.split(':');
+                        return +h + m/60 + s/3600; 
+                    },*/
+                    // © 2022 Meteorological Data System, Co. Ltd. All Rights Reserved TE_Simplified_SP_220805.pdf.pdf
+                    // 黄道傾斜角[deg]
+                    dec0(){ return -this.phi + 0.013*20/100 },
+                    // 平均近点離角[deg]
+                    mm() { return 360*(this.day - 3.71+0.2596*(this.year-1968))/365},
+                    // 冬至点と近日点がなす角度[deg]
+                    ep() { return 12.3901 + 0.0172 * (this.year-1968 + this.mm/360) },
+                     // 真近点離角[deg] 
+                    v() { return this.mm + 1.918*Math.sin(d2r(this.mm))+0.02*Math.sin(d2r(this.mm*2)) },
+                     // 視赤緯 declination[rad]
+                    dec() { return Math.asin( Math.cos(d2r(this.ep + this.v)) * Math.sin(d2r(this.dec0)) ) },
+                    // 均時差[rad]
+                    et() { return d2r(this.mm - this.v) - Math.atan(0.043*Math.sin(2*d2r(this.ep+this.v)) / (1-0.043*Math.cos(2*d2r(this.ep+this.v)))) },
+                    // 時角[deg]
+                    th() { return 15 * (this.hour - 12) + (135-135) },
+                    // 太陽高度[rad]
+                    sunAlt() {
+                        // 南中高度はこれ　return (90-this.lat)+this.phi * Math.sin();
+                        return Math.asin( Math.sin(d2r(this.lat))*Math.sin(this.dec) + Math.cos(d2r(this.lat))*Math.cos(this.dec)*Math.cos(d2r(this.th)) );
+                    },
+                    // 太陽方位角[rad]
+                    sunAzm() {
+                        const sinA = Math.cos(this.dec) * Math.sin(d2r(this.th)) / Math.cos(this.sunAlt);
+                        const cosA = (Math.sin(this.sunAlt) * Math.sin(d2r(this.lat))-Math.sin(this.dec)) / (Math.cos(this.sunAlt)*Math.cos(d2r(this.lat)));
+                        return Math.atan2(sinA, cosA); 
+                    },
+                    skyGrad() {
+                        // 仰角の値に応じて参照配列を取得する
+                        const deg = r2d(this.sunAlt);
+                        let idx = 0;
+                        for (idx = 0; idx < this.colors.length - 1; idx++) {
+                            if (this.colors[idx+1].alt > deg) {
+                                break;
+                            }
+                        }
+                        const c0 = this.colors[idx];
+                        const c1 = this.colors[idx+1];
+                        // 按分量
+                        const ratio = (deg - c0.alt) / (c1.alt - c0.alt); 
+                        // 按分した値で決定する
+                        const mixmode = 'lab';
+                        const zenith = chroma.mix(c0.zenith, c1.zenith, ratio, mixmode);
+                        const mid = chroma.mix(c0.mid, c1.mid, ratio, mixmode);
+                        const sun = chroma.mix(c0.horizon.sun, c1.horizon.sun, ratio, mixmode);
+                        const gamma =  (1- ratio) * c0.gamma + ratio * c1.gamma;
+                        const scale = chroma.scale([zenith, mid, sun]).mode(this.mixmode).gamma(gamma);
+                        const arr = [];
+                        for (let i = 0; i <= this.div; i++) {
+                            arr.push({ color: scale(i / this.div), percent: i * 100 / this.div});
+                        }
+                        return arr;
+                    },
+                    //太陽色
+                    sunColor() {
+                        return this.sunColorScale(
+                            (this.thickness(this.sunAlt) - this.thickness(Math.PI/2) )/(this.thickness(0)-this.thickness(Math.PI/2))
+                        );
+                    },
+                    // 仰角に合わせた配色
+                    autoScale() {
+
+                        const arr = [];
+                        for (let i = 0; i <= this.div; i++) {
+                            arr.push(scale(i / this.div));
+                        }
+                        return {scale: arr, color: this.colors[t]};
+                    },
+                },
+                methods: {
+                    colStr(col) {
+                        return chroma(col);
+                    },
+                    hueStr(col) {
+                        return chroma(col).get('hsl.h').toFixed(1);
+                    },
+                    // 仰角に応じた大気厚み (x+R)^2+y^2 = (R+h)^2を極座標変換
+                    thickness(theta) {
+                        const p = theta - Math.PI/2; 
+                        return Math.sqrt(
+                            (this.radius * Math.cos(p))**2 + 2 * this.atomos * this.radius + this.atomos**2
+                        ) - this.radius * Math.cos(p);
+                    },
+                    d2r,
+                    r2d,
+                },
+            };
+
+
+            const app = Vue.createApp(test1);
+            app.mount("#app");
+            const ctx = lane.getContext('2d');
+            const grad = ctx.createLinearGradient(0,0,0,100);
+        </script>
+    </body>
 </html>
